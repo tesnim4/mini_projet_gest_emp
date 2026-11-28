@@ -1,24 +1,25 @@
 package tn.iset.m2glnt.server;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 import io.javalin.Javalin;
 import io.javalin.json.JavalinJackson;
 import tn.iset.m2glnt.server.controler.CalendarController;
 import tn.iset.m2glnt.server.dto.CalendarDTO;
 import tn.iset.m2glnt.server.dto.TimeInterval;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
 public class Main {
     public static void main(String[] args) {
         int port = resolvePort();
         CalendarController calendarController = new CalendarController();
 
-        // ✅ Configuration Jackson pour supporter LocalDateTime
+        // Configuration Jackson pour supporter LocalDateTime
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -26,6 +27,12 @@ public class Main {
         Javalin.create(javalinConfig -> {
             javalinConfig.bundledPlugins.enableDevLogging();
             javalinConfig.jsonMapper(new JavalinJackson(mapper, false)); 
+            
+            // AJOUTEZ CES 3 LIGNES ICI POUR ACTIVER LE CORS 
+            javalinConfig.bundledPlugins.enableCors(cors -> {
+                cors.addRule(it -> it.anyHost());
+            });
+            
         })
                 // Route existante
                 .get("/timeslots/{dateInterval}",
