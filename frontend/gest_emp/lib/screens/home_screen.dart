@@ -13,8 +13,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<CalendarSlot>> _slotsFuture;
-  String _from = '2027-01-01';
-  String _to = '2027-01-31';
+
+  DateTime? _from;
+  DateTime? _to;
 
   @override
   void initState() {
@@ -22,49 +23,76 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadSlots();
   }
 
+  
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   void _loadSlots() {
+    
+    final fromStr = _from != null ? _formatDate(_from!) : '2000-01-01';
+    final toStr = _to != null ? _formatDate(_to!) : '2100-12-31';
+
     setState(() {
-      _slotsFuture = ApiService.getSlots(_from, _to);
+      _slotsFuture = ApiService.getSlots(fromStr, toStr);
     });
   }
 
   Future<void> _pickDate(bool isFrom) async {
+    // On ouvre le calendrier à la date actuelle si aucune date n'est choisie
+    final initialDate =
+        isFrom ? (_from ?? DateTime.now()) : (_to ?? DateTime.now());
+
     final date = await showDatePicker(
       context: context,
-      initialDate: DateTime.parse(isFrom ? _from : _to),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
     );
+
     if (date != null) {
       setState(() {
-        final d = date.toIso8601String().split('T')[0];
-        if (isFrom) _from = d; else _to = d;
+        if (isFrom) {
+          _from = date;
+        } else {
+          _to = date;
+        }
       });
-      _loadSlots();
+      _loadSlots(); // Recharge les données avec la nouvelle date
     }
   }
 
   void _deleteSlot(int id, String desc) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmer'),
-        content: Text('Supprimer "$desc" ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Confirmer'),
+            content: Text('Supprimer "$desc" ?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Annuler'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Supprimer',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
     );
 
     if (confirm == true) {
       try {
         await ApiService.deleteSlot(id);
-        if (!mounted) return;
         _loadSlots();
       } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
@@ -84,9 +112,25 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                OutlinedButton(onPressed: () => _pickDate(true), child: Text('Du: $_from')),
-                OutlinedButton(onPressed: () => _pickDate(false), child: Text('Au: $_to')),
-                IconButton(icon: const Icon(Icons.refresh), onPressed: _loadSlots),
+                // ✅ MODIFICATION : Affichage conditionnel du texte des boutons
+                OutlinedButton(
+                  onPressed: () => _pickDate(true),
+                  child: Text(
+                    _from == null
+                        ? 'Du: Choisir'
+                        : 'Du: ${_formatDate(_from!)}',
+                  ),
+                ),
+                OutlinedButton(
+                  onPressed: () => _pickDate(false),
+                  child: Text(
+                    _to == null ? 'Au: Choisir' : 'Au: ${_formatDate(_to!)}',
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadSlots,
+                ),
               ],
             ),
           ),
@@ -99,24 +143,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
                 if (snapshot.hasError) {
                   return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text('Erreur: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    child: Text(
+                      'Erreur: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
                     ),
                   );
                 }
                 final slots = snapshot.data ?? [];
                 if (slots.isEmpty) {
-                  return const Center(child: Text('Aucun créneau sur cette période.'));
+                  return const Center(child: Text('Aucun créneau trouvé.'));
                 }
                 return ListView.builder(
                   itemCount: slots.length,
                   itemBuilder: (context, index) {
                     final slot = slots[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       child: ListTile(
-                        title: Text(slot.description, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(
+                          slot.description,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Text(
                           '${slot.timeInterval.start.replaceAll('T', ' ')} -> ${slot.timeInterval.end.replaceAll('T', ' ')}',
                         ),
@@ -128,14 +178,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               onPressed: () async {
                                 final refreshed = await Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (_) => SlotFormScreen(slot: slot)),
+                                  MaterialPageRoute(
+                                    builder: (_) => SlotFormScreen(slot: slot),
+                                  ),
                                 );
                                 if (refreshed == true) _loadSlots();
                               },
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteSlot(slot.id, slot.description),
+                              onPressed:
+                                  () => _deleteSlot(slot.id, slot.description),
                             ),
                           ],
                         ),
